@@ -4,11 +4,12 @@
 #include "SHA256.h"
 
 
-/**
- * Function HMAC_SHA256
- * @param key, message
- * @return message authentication code
- */
+/*
+ 
+
+ 
+ 
+
 std::string HMAC_SHA256(std::string key, std::string password) {
     std::vector<uint8_t> keyBlock(64, 0x00);
     SHA256 hash;
@@ -21,16 +22,16 @@ std::string HMAC_SHA256(std::string key, std::string password) {
 }
 
 
-/**
+
  * Function PBKDF2
  * @param password, salt, hash, length
  * @param c is iterations
  * @return string derived key
- */
+ 
 std::string PBKDF2(std::string password, std::string salt, int c, SHA256 hash, int length){
     //TODO implement PBKDF2
 }
-
+*/
 
 
 
@@ -38,11 +39,15 @@ std::string PBKDF2(std::string password, std::string salt, int c, SHA256 hash, i
 int main() { 
 
     std::string key = "thisisthekey";
-    std::string password = "HelloWorld!";
+    std::string password = "hello world";
     SHA256 hash;
 
-    HMAC_SHA256(key, password);
-    std::cout << password;
+    //HMAC_SHA256(key, password);
+    
+    
+    hash.PreProcessMessage(password);
+    
+    
 
     return 0; 
 }

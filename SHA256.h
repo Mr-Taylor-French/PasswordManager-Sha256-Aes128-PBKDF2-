@@ -1,7 +1,12 @@
+#ifndef SHA256_H
+#define SHA256_H
+
+
 #include <iostream>
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <inttypes.h>
 
 class SHA256 {
 private:
@@ -45,16 +50,21 @@ public:
         }//after this loop, msg_bytes will be multiple of 64 bytes in length, if short enough, just 64bytes
 
         // Split into 512-bit (64-byte) blocks
+	int counter = 0;
         for (size_t i = 0; i < msg_bytes.size(); i += 64) {//step by 64 as each chunk being process is 64 bytes
             std::vector<uint8_t> block(msg_bytes.begin() + i, msg_bytes.begin() + i + 64); //create a block, each block is 1byte   
-            blocks.push_back(block); //push that block into last position of blocks vector, blocks should have multiple of 64 bytes, 1 byte blocks 
+            blocks.push_back(block); //push that block into last position of blocks vector, blocks should have multiple of 64 bytes, 1 byte blocks
+	  
+	    
         }// after this, the message is fully divided into 512-bit (64-byte) blocks stored in 'blocks', length of message determines how many blocks, if short only one 512bit block is used
+	
+
     }
 
     std::vector<uint32_t> message_schedule(const std::vector<uint8_t>& block){ 
-        /*this will process one block of blocks, and create schedule for compression of that one 64 byte block, the other blocks if there are any, will use their own message schedule and compression,
-        take block and put them in vector of 32 bit words/elements, 4 blocks to each word, block being 1 byte, 
-        */
+        //this will process one block of blocks, and create schedule for compression of that one 64 byte block, the other blocks if there are any, will use their own message schedule and compression,
+        //take block and put them in vector of 32 bit words/elements, 4 block elements(uint8_t) to each word, block being 1 byte, 
+        
         //first 16 words are from 64 byte block
         std::vector<uint32_t> message_words;
         for (size_t i = 0; i < 16; i++){
@@ -66,17 +76,31 @@ public:
                 (static_cast<uint32_t>(block[i*4 + 2]) << 8) |
                 (static_cast<uint32_t>(block[i*4 + 3]));
             message_words.push_back(word);
-        }
+        }//more efficient to have two seperate loops than a complex loop with ifs and elses
+	for (size_t i = 0; i < 48; i++){
+	    uint32_t word = 0x00000000;// 00 is 8bit hex of 0, so four 00's is 32 bit 0 in hex
+	    message_words.push_back(word);
+	}
+	
+
+
+	return message_words;
+
     }
 
+    
 
-    //TODO impelement update function to increment data, not sure what this is for, input should be constant by the time it hits sha256
+    /*TODO impelement update function to increment data, not sure what this is for, input should be constant by the time it hits sha256
     void update(const std::string& input){
     }
 
     
-    //TODO implement digest function to get the 32 byte result
+    TODO implement digest function to get the 32 byte result
     std::vector<uint8_t> digest(){
         
     }
+    */
 };
+
+
+#endif
