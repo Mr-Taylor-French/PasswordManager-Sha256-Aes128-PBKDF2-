@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
-#include <inttypes.h>
+
 
 class SHA256 {
 private:
@@ -57,11 +57,12 @@ public:
 	  
 	    
         }// after this, the message is fully divided into 512-bit (64-byte) blocks stored in 'blocks', length of message determines how many blocks, if short only one 512bit block is used
-	
+	message_schedule(blocks[0]);
 
     }
 
-    std::vector<uint32_t> message_schedule(const std::vector<uint8_t>& block){ 
+    //std::vector<uint32_t>
+    void message_schedule(const std::vector<uint8_t>& block){ 
         //this will process one block of blocks, and create schedule for compression of that one 64 byte block, the other blocks if there are any, will use their own message schedule and compression,
         //take block and put them in vector of 32 bit words/elements, 4 block elements(uint8_t) to each word, block being 1 byte, 
         
@@ -76,16 +77,28 @@ public:
                 (static_cast<uint32_t>(block[i*4 + 2]) << 8) |
                 (static_cast<uint32_t>(block[i*4 + 3]));
             message_words.push_back(word);
-        }//more efficient to have two seperate loops than a complex loop with ifs and elses
-	for (size_t i = 0; i < 48; i++){
-	    uint32_t word = 0x00000000;// 00 is 8bit hex of 0, so four 00's is 32 bit 0 in hex
+        }//more efficient to have two seperate loops than a complex loop with branches
+	 
+	for (size_t i = 16; i < 64; i++){//48 more words to fill, in doc they are set to 0's first but... dont see a reason for that, just go straight to computing them
+	    //w[16] explanation, for right rotate, right shift the whole thing by whatever, here 7, then left shift the entire thing minus the bits that would fall off, 32-7, then combine them with or
+	    //means all bits that would fall off right side get attached to left end, right rotated that ho
+	    uint32_t s0a = (message_words[i-15] >> 7) | (message_words[i-15] << 25);
+	    uint32_t s0b = (message_words[i-15] >> 18) | (message_words[i-15] << 14);
+	    uint32_t s0c = message_words[i-15] >> 3;
+	    uint32_t s0 = s0a ^ s0b ^ s0c;
+
+	    uint32_t s1a = (message_words[i-2] >> 17) | (message_words[i-2] << 15);
+	    uint32_t s1b = (message_words[i-2] >> 19) | (message_words[i-2] << 13);
+	    uint32_t s1c = message_words[i-2] >> 10;
+	    uint32_t s1 = s1a ^ s1b ^ s1c;
+
+	    uint32_t word = message_words[i-16] + s0 + message_words[i-7] + s1; //c++ already handles the mod 2^32 wrapping if integers overflow so no need to worry about that,
 	    message_words.push_back(word);
 	}
+
 	
 
-
-	return message_words;
-
+	//return message_words;
     }
 
     
