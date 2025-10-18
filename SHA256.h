@@ -1,16 +1,17 @@
 #ifndef SHA256_H
 #define SHA256_H
 
-
 #include <iostream>
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <sstream>
+#include <iomanip>
 
 
 class SHA256 {
 private:
-    //outer blocks is to hold multiple 512bit blocks from preprocessed message
+    //outer blocks is to hold multiple 512bit blocks from preprocessed message, if multiple blocks are needed
     std::vector<std::vector<uint8_t>> blocks; // Each block should be 512-bits (64 bytes), block vector has elements of 1-byte(8bit), there should be 64 elements of the inner vector making 64bytes total in inner
 
     //even though values are derived by fancy math functions, same for round constants btw, values are still used as 32 bit integers
@@ -28,56 +29,64 @@ private:
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     }; //each round constant is 32 bits, theres 64 * 4bytes, so 256bytes total
 
-public:
+
+    /*now for private function parts, they will only be used in this class, so why not make them private*/
+    
+    void ClearHashConstants(){
+	hash_constants = {
+	    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+	};
+    }
+
     void PreProcessMessage(const std::string& input) { //first part of this algorithm, takes the input and preprocesses it
-        blocks.clear(); 
+	blocks.clear(); //in case blocks were full before this, function is called(this function will only be called once per hash)
 
-        std::vector<uint8_t> msg_bytes(input.begin(), input.end()); //vector that takes a string and converts each character into 1-byte elements 
+	std::vector<uint8_t> msg_bytes(input.begin(), input.end()); //vector that takes a string and converts each character into 1-byte elements
 
-        // append '1' bit (0x80)
-        msg_bytes.push_back(0x80); 
+	// append '1' bit (0x80)
+	msg_bytes.push_back(0x80);
 
-        // Pad with zeros until length = 56 (mod 64)
-        while ((msg_bytes.size() % 64) != 56) {
-            msg_bytes.push_back(0x00);
-        }
-        
-        // Append the original message length at the end of the message vector as a 64-bit big-endian integer,  
-        uint64_t bit_len = static_cast<uint64_t>(input.size()) * 8; //compute input string length, if str = ABC, 3 bytes * 8 = 24 bits, static cast of 64 makes it 64bits, just adds leading zeros to make sure its represented as 64 bit
-        for (int i = 7; i >= 0; --i) {
-            uint8_t byte_to_extract = (bit_len >> (i * 8)) & 0xFF; //at i = 7, shifts the length 56 bits to the right, then you & it to just get that byte(last 8 bits)
-            msg_bytes.push_back(byte_to_extract); 
-        }//after this loop, msg_bytes will be multiple of 64 bytes in length, if short enough, just 64bytes
+	// Pad with zeros until length = 56 (mod 64)
+	while ((msg_bytes.size() % 64) != 56) {
+	    msg_bytes.push_back(0x00);
+	}
 
-        // Split into 512-bit (64-byte) blocks
-        for (size_t i = 0; i < msg_bytes.size(); i += 64) {//step by 64 as each chunk being process is 64 bytes
-            std::vector<uint8_t> block(msg_bytes.begin() + i, msg_bytes.begin() + i + 64); //create a block, each block is 1byte   
-            blocks.push_back(block); //push that block into last position of blocks vector, blocks should have multiple of 64 bytes, 1 byte blocks
+	// Append the original message length at the end of the message vector as a 64-bit big-endian integer,
+	uint64_t bit_len = static_cast<uint64_t>(input.size()) * 8; //compute input string length, if str = ABC, 3 bytes * 8 = 24 bits, static cast of 64 makes it 64bits, to make sure its represented as 64 bit
+	for (int i = 7; i >= 0; --i) {
+	    uint8_t byte_to_extract = (bit_len >> (i * 8)) & 0xFF; //at i = 7, shifts the length 56 bits to the right, then you & it to just get that byte(last 8 bits)
+	    msg_bytes.push_back(byte_to_extract);
+	}//after this loop, msg_bytes will be multiple of 64 bytes in length, if short enough, just 64bytes
+
+	// Split into 512-bit (64-byte) blocks
+	for (size_t i = 0; i < msg_bytes.size(); i += 64) {//step by 64 as each chunk being process is 64 bytes
+	    std::vector<uint8_t> block(msg_bytes.begin() + i, msg_bytes.begin() + i + 64); //create a block, each block is 1byte
+	    blocks.push_back(block); //push that block into last position of blocks vector, blocks should have multiple of 64 bytes, 1 byte blocks
 
 	    if (block.size() != 64){
 		std::cerr << "Error: length of block is " << block.size() << ", thats bad fuckface, should be 64\n";
 		std::exit(EXIT_FAILURE);
 	    }
-        }// after this, the message is fully divided into 512-bit (64-byte) blocks stored in 'blocks', length of message determines how many blocks, if short only one 512bit block is used
+	}// after this, the message is fully divided into 512-bit (64-byte) blocks stored in 'blocks', length of message determines how many blocks, if short only one 512bit block is used
     }
 
-    std::vector<uint32_t> message_schedule(const std::vector<uint8_t>& block){ 
-        //this will process one block of blocks, and create schedule for compression of that one 64 byte block, the other blocks if there are any, will use their own message schedule and compression,
-        //take block and put them in vector of 32 bit words/elements, 4 block elements(uint8_t) to each word, block being 1 byte, 
-        
-        //first 16 words are from 64 byte block
-        std::vector<uint32_t> message_words;
-        for (size_t i = 0; i < 16; i++){
-            //the idea here is, take 4 bytes from 64 byte block, b[0], b[1], b[2], b[3] and pack them into a 32-bit(4byte) word, put that into message_words vector
-            //first byte of word(static_cast<uint32_t>(block[i*4]), that just makes sure its a 32 bit num, shifted 3 bytes left, each thing or'ed to combine it, next shifted 2 bytes left, etc
-            uint32_t word = 
-                (static_cast<uint32_t>(block[i*4]) << 24) |
-                (static_cast<uint32_t>(block[i*4 + 1]) << 16) |
-                (static_cast<uint32_t>(block[i*4 + 2]) << 8) |
-                (static_cast<uint32_t>(block[i*4 + 3]));
-            message_words.push_back(word);
-        }//more efficient to have two seperate loops than a complex loop with branches
-	 
+    std::vector<uint32_t> message_schedule(const std::vector<uint8_t>& block){
+	//this will process one block of blocks, and create schedule for compression of that one 64 byte block, the other blocks if there are any, will use their own message schedule and compression,
+	//take block and put them in vector of 32 bit words/elements, 4 block elements(uint8_t) to each word, block being 1 byte,
+
+	//first 16 words are from 64 byte block
+	std::vector<uint32_t> message_words;
+	for (size_t i = 0; i < 16; i++){
+	    //the idea here is, take 4 bytes from 64 byte block, b[0], b[1], b[2], b[3] and pack them into a 32-bit(4byte) word, put that into message_words vector
+	    //first byte of word(static_cast<uint32_t>(block[i*4]), that just makes sure its a 32 bit num, shifted 3 bytes left, each thing or'ed to combine it, next shifted 2 bytes left, etc
+	    uint32_t word =
+		(static_cast<uint32_t>(block[i*4]) << 24) |
+		(static_cast<uint32_t>(block[i*4 + 1]) << 16) |
+		(static_cast<uint32_t>(block[i*4 + 2]) << 8) |
+		(static_cast<uint32_t>(block[i*4 + 3]));
+	    message_words.push_back(word);
+	}//more efficient to have two seperate loops than a complex loop with branches
+
 	for (size_t i = 16; i < 64; i++){//48 more words to fill, in doc they are set to 0's first but... dont see a reason for that, just go straight to computing them
 	    //w[16] explanation, for right rotate, right shift the whole thing by whatever, here 7, then left shift the entire thing minus the bits that would fall off, 32-7, then combine them with or
 	    //means all bits that would fall off right side get attached to left end, right rotated that ho
@@ -111,9 +120,9 @@ public:
 	uint32_t f = hash_constants[5];
 	uint32_t g = hash_constants[6];
 	uint32_t h = hash_constants[7];
-	
+
 	std::vector<uint32_t> message_schedy = message_schedule(block);
-	
+
 	uint32_t S1, ch, temp1, S0, maj, temp2;
 	for (size_t i = 0; i < 64; i++){
 	    S1 = ((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7)); //S1 = three right rotations and xor'ed together
@@ -142,18 +151,36 @@ public:
 	hash_constants[7] = hash_constants[7] + h;
     }
 
-    
-
-    /*TODO impelement update function to increment data, not sure what this is for, input should be constant by the time it hits sha256
-    void update(const std::string& input){
+public:
+    //digest function to get the 32 byte result
+    std::vector<uint8_t> hash(const std::string& input){//either have it return a string for quick checking against other hashes or a vector to easily iterate through it, vector seems good to me right now
+	PreProcessMessage(input);
+	ClearHashConstants();
+	for (size_t i = 0; i < blocks.size(); i++){
+	    compression(blocks[i]);
+	}//compression updates the hashed constants for each block, now all thats left is to slap em into the output hash
+	std::vector<uint8_t> hashed_message;
+	for (size_t i = 0; i < 8; i++){
+	    hashed_message.push_back(hash_constants[i]);
+	}
+    return hashed_message;	
     }
 
-    
-    TODO implement digest function to get the 32 byte result
-    std::vector<uint8_t> digest(){
-        
+    std::string hash_print(const std::string& input){ //to eyeball as a string or any other reason you would need the string represntation
+	PreProcessMessage(input);
+	ClearHashConstants(); //as same object might be used more than once or hash values memory persist somehow, in test cases that got me good, lol
+	for (size_t i = 0; i < blocks.size(); i++){
+	    compression(blocks[i]);
+	}//compression updates the hashed constants for each block, now all thats left is to slap em into the output hash
+	std::ostringstream string_stream;
+	for (size_t i = 0; i < 8; i++){
+	    string_stream << std::hex << std::uppercase << std::setw(8) << std::setfill('0') << static_cast<unsigned int>(hash_constants[i]);
+	    //pretty simple, the thing to be concotanated we want to be a hex, the setw means the minimun char count is 8 per thing, if the hex does not have 8 chars, padded with 0s,
+	    //and number to be concotanated at end
+	}
+    return string_stream.str();
     }
-    */
+    
 };
 
 

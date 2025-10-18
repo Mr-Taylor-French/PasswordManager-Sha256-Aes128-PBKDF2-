@@ -39,13 +39,14 @@ std::string PBKDF2(std::string password, std::string salt, int c, SHA256 hash, i
 int main() { 
 
     std::string key = "thisisthekey";
-    std::string password = "hello world";
-    SHA256 hash;
+    std::string password = "!@#$%^&*()_+-={}[]|:;<>,.?/~`";
+    SHA256 obj;
 
     //HMAC_SHA256(key, password);
     
     
-    hash.PreProcessMessage(password);
+    std::string test_vec = obj.hash_print(password);
+    std::cout << test_vec << std::endl;
     
     
 
