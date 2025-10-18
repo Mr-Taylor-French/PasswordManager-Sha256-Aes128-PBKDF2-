@@ -135,9 +135,9 @@ public:
 	hash_constants[0] = hash_constants[0] + a;
 	hash_constants[1] = hash_constants[1] + b;
 	hash_constants[2] = hash_constants[2] + c;
-        hash_constants[3] = hash_constants[3] + d;
+	hash_constants[3] = hash_constants[3] + d;
 	hash_constants[4] = hash_constants[4] + e;
-        hash_constants[5] = hash_constants[5] + f;
+	hash_constants[5] = hash_constants[5] + f;
 	hash_constants[6] = hash_constants[6] + g;
 	hash_constants[7] = hash_constants[7] + h;
     }
