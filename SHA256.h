@@ -160,15 +160,19 @@ public:
 	    compression(blocks[i]);
 	}//compression updates the hashed constants for each block, now all thats left is to slap em into the output hash
 	std::vector<uint8_t> hashed_message;
-	for (size_t i = 0; i < 8; i++){
-	    hashed_message.push_back(hash_constants[i]);
+	for (size_t i = 0; i < 8; i++){//well shit dog, before we were pushing only 8 bits of the hashed costants in, ie hashed_message.push_back(hash_constants)
+		uint32_t h = hash_constants[i];
+		hashed_message.push_back((h >> 24) & 0xff);
+		hashed_message.push_back((h >> 16) & 0xff);
+		hashed_message.push_back((h >> 8) & 0xff);
+		hashed_message.push_back(h & 0xff);
 	}
     return hashed_message;	
     }
 
     std::string hash_print(const std::string& input){ //to eyeball as a string or any other reason you would need the string represntation
 	PreProcessMessage(input);
-	ClearHashConstants(); //as same object might be used more than once or hash values memory persist somehow, in test cases that got me good, lol
+	ClearHashConstants(); //as same object might be used more than once or hash values memory persist somehow, in test cases that got me good lol
 	for (size_t i = 0; i < blocks.size(); i++){
 	    compression(blocks[i]);
 	}//compression updates the hashed constants for each block, now all thats left is to slap em into the output hash
