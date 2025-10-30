@@ -160,7 +160,7 @@ public:
 	    compression(blocks[i]);
 	}//compression updates the hashed constants for each block, now all thats left is to slap em into the output hash
 	std::vector<uint8_t> hashed_message;
-	for (size_t i = 0; i < 8; i++){//well shit dog, before we were pushing only 8 bits of the hashed costants in, ie hashed_message.push_back(hash_constants)
+	for (size_t i = 0; i < 8; i++){
 		uint32_t h = hash_constants[i];
 		hashed_message.push_back((h >> 24) & 0xff);
 		hashed_message.push_back((h >> 16) & 0xff);
