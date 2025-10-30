@@ -8,7 +8,7 @@
 
 void secure_wipe_string(std::string &s){//have to do this because compiler optimizations wont let you just do a fill,
 	if (!s.empty()) {//if already empty, no need to wipe
-		volatile char *p = &s[0];
+		volatile char *p = &s[0];//idea is to make a volatile pointer to first of string(so no compiler optimization problems) then fill string with gargage data
 		std::fill(p, p + s.size(), '\0');
 	}
 }
