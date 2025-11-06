@@ -2,16 +2,21 @@
 #include <string>
 #include <cstdint>
 #include <vector>
-#include "SHA256.h"
 #include <random>
 #include <algorithm>
+#include "pbkdf2_hmac.h"
+#include "SHA256.h"
 
+
+
+/* Just if strings are getting used anywhere, why not keep it, before because the string to vec issue*/
 void secure_wipe_string(std::string &s){//have to do this because compiler optimizations wont let you just do a fill,
 	if (!s.empty()) {//if already empty, no need to wipe
 		volatile char *p = &s[0];//idea is to make a volatile pointer to first of string(so no compiler optimization problems) then fill string with gargage data
 		std::fill(p, p + s.size(), '\0');
 	}
 }
+
 void secure_wipe_vec(std::vector<uint8_t> &vec){
 	if (!vec.empty()){
 		volatile uint8_t *p = &vec[0];
@@ -22,14 +27,8 @@ void secure_wipe_vec(std::vector<uint8_t> &vec){
 std::vector<uint8_t> HMAC_SHA256(const std::vector<uint8_t> &key, const std::vector<uint8_t> &text){//reference so whole thing is not copied, parameters are const in this func.
 	std::vector<uint8_t> B = key;//the byte 'string' to use in these internal calculations
 	SHA256 obj;
-	if(B.empty()){// reminder, c ifs evaluate to true if the statement itself is true, no need for B.empty() == true
-		throw std::runtime_error("Key cannot be empty, its being copied to a temporary value if that give any more info on problem");
-	}
 	if(B.size() > 64){//if key is longer than block size, errors will occur so hash it as doc says, you do it before the pad if cond. is hit so it can be padded to 64 length vector
-		std::string t (B.begin(), B.end());
-		B.clear();//clear B
-		B = obj.hash(t);
-		secure_wipe_string(t);
+		B = obj.hash(B);
 	}
 	if (B.size() < 64){//it needs to be padded with zero bytes here if not length of blocks used in hashing func.
 		B.resize(64, 0x00); //this is better than a while loop with filling at the end of array, one vector size reallocation
@@ -48,99 +47,79 @@ std::vector<uint8_t> HMAC_SHA256(const std::vector<uint8_t> &key, const std::vec
 	for (size_t i = 0; i < text.size(); i++){//append text to B_xor_ipad,
 		B_xor_ipad.push_back(text[i]);
 	}
-	std::string s (B_xor_ipad.begin(), B_xor_ipad.end());//works because it defines the iterators for it and chars are 8bits, other vector decimal types wont work
+
+	std::vector<uint8_t> s_hash = obj.hash(B_xor_ipad);
 	secure_wipe_vec(B_xor_ipad);
-	std::vector<uint8_t> s_hash = obj.hash(s);
-	secure_wipe_string(s);
 
 	for (size_t i = 0; i < s_hash.size(); i++){//append the first hash result to the xor_outer thing
 		B_xor_opad.push_back(s_hash[i]);
 	}
-	std::string p (B_xor_opad.begin(), B_xor_opad.end());
+	secure_wipe_vec(s_hash);
+	std::vector<uint8_t> result = obj.hash(B_xor_opad);//hash that result then we good
 	secure_wipe_vec(B_xor_opad);
-	std::vector<uint8_t> result = obj.hash(p);//hash that result then we good
-	secure_wipe_string(p);
 	return result;
 }
 
 
-class CryptoRandom{
-private:
-	SHA256 sha_obj;
-	std::vector<uint8_t> hash_vec;
-	std::vector<uint8_t> hmac_rand;
-	std::random_device rd; //an object to use to get randomish bytes, each rd() returns an unsigned int. note, doesnt matter creating new rd objs that rd() will get a new thing each time not deterministic
 
-	void GetNewHMAC(){//just turns old hashed vector into a new hash then HMACs that again with a new salt array
-		std::string t (hash_vec.begin(), hash_vec.end());
-		secure_wipe_vec(hmac_rand);
-		secure_wipe_vec(hash_vec);
-		hash_vec = sha_obj.hash(t);//as sha obj should still exist if new iv and salt are gotten, might as well use it again
-		secure_wipe_string(t);
-		std::vector<uint8_t> rand_vec(64), XORvec;
+void CryptoRandom::GetNewHMAC(){//just turns old hashed vector into a new hash then HMACs that again with a new salt array
+	secure_wipe_vec(hmac_rand);
+	hash_vec = sha_obj.hash(hash_vec);//as sha obj should still exist if new iv and salt are gotten, might as well use it again
 
-		for (auto &b : rand_vec) b = static_cast<uint8_t>(rd()); //assigns the b, a byte to the vector with index b
+	std::vector<uint8_t> rand_vec(64), XORvec;
 
-		size_t limit = std::min(hash_vec.size(), rand_vec.size());
-		for (size_t i = 0; i < limit; i++){
-			XORvec.push_back(hash_vec[i] ^ rand_vec[i]);
-		}
-		hmac_rand = HMAC_SHA256(hash_vec, XORvec);
-		if (hmac_rand.empty()){//just in case ig
-			throw std::runtime_error(" hmac_rand cannot be empty");
-		}
+	for (auto &b : rand_vec) b = static_cast<uint8_t>(rd()); //assigns the b, a byte to the vector with index b
+
+	size_t limit = std::min(hash_vec.size(), rand_vec.size());
+	for (size_t i = 0; i < limit; i++){
+		XORvec.push_back(hash_vec[i] ^ rand_vec[i]);
 	}
-public:
-	CryptoRandom(){/*constructor*/	
-		std::string seed_str(32, ' ');
-		for (auto &b : seed_str) b = static_cast<unsigned char>(rd()); //assigns the b, a byte to the string with index b
-		hash_vec = sha_obj.hash(seed_str);
-		secure_wipe_string(seed_str);
-		GetNewHMAC();
+	hmac_rand = HMAC_SHA256(hash_vec, XORvec);
+	if (hmac_rand.empty()){//just in case ig
+		throw std::runtime_error(" hmac_rand cannot be empty");
 	}
+}
 
-	/*Disable copy construction, copy assignment, and std:move()*/
-	CryptoRandom(const CryptoRandom&) = delete;
-	CryptoRandom& operator=(const CryptoRandom&) = delete;
-	CryptoRandom(CryptoRandom&&) = delete;
+CryptoRandom::CryptoRandom(){/*constructor*/
+	hash_vec.resize(64);
+	for (auto &b : hash_vec) b = static_cast<uint8_t>(rd());
+	hash_vec = sha_obj.hash(hash_vec);
+	GetNewHMAC();
+}
 
-	std::vector<uint8_t> GetSalt(size_t size){
-		if (size == 0){
-			throw std::runtime_error("Salt size cannot be less than or equal to zero");
-		}
-		std::vector<uint8_t> salt_vec(size);
 
-		for (auto &b : salt_vec) b = static_cast<uint8_t>(rd()); //assigns the b, a byte to the vector with index b
-		return salt_vec;
+std::vector<uint8_t> CryptoRandom::GetSalt(size_t size){
+	if (size == 0){
+		throw std::runtime_error("Salt size cannot be less than or equal to zero");
 	}
+	std::vector<uint8_t> salt_vec(size);
+
+	for (auto &b : salt_vec) b = static_cast<uint8_t>(rd()); //assigns the b, a byte to the vector with index b
+	return salt_vec;
+}
 	
-	std::vector<uint8_t> GetIv(size_t size){//almost same as salt but makes sure to add no number used twice idea,
-		std::vector<uint8_t> IV(size);
-		if (size == 0){
-			throw std::runtime_error("IV size or half_size cannot be less than or equal to zero");
-		}
-		
-		for (size_t i = 0; i < size; i++){
-			IV[i] = static_cast<uint8_t>(rd()) ^ hmac_rand[i % hmac_rand.size()]; //only some will be used, modulus so it can wrap around itself if iv > hmac_rand.size()
-		}
-		GetNewHMAC();//for if next time IV is needed, get a new random hmac vec in this for nonce reasons, og hmac for this GetIv is alredy made the first time obj is constructed
-		return IV;
+std::vector<uint8_t> CryptoRandom::GetIv(size_t size){//almost same as salt but makes sure to add no number used twice idea,
+	std::vector<uint8_t> IV(size);
+	if (size == 0){
+		throw std::runtime_error("IV size or half_size cannot be less than or equal to zero");
 	}
-	~CryptoRandom() {
+		
+	for (size_t i = 0; i < size; i++){
+		IV[i] = static_cast<uint8_t>(rd()) ^ hmac_rand[i % hmac_rand.size()]; //only some will be used, modulus so it can wrap around itself if iv > hmac_rand.size()
+	}
+	return IV;
+}
+
+CryptoRandom::~CryptoRandom() {
 		secure_wipe_vec(hash_vec);
 		secure_wipe_vec(hmac_rand);
 	}
 };
 
-void print_hex(const std::vector<uint8_t>& data) {
-	for (auto b : data){
-		std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)b;
-	}
-	std::cout << std::dec << "\n";
+uint64_t ceiling_func(uint64_t a, uint64_t b){//no need for another library which will get messy, simple way to do it
+	return (a + b - 1) / b;
 }
 
-
-/*
 std::vector<uint8_t> PBKDF2(const std::vector<uint8_t> &password, const std::vector<uint8_t> &salt, const uint64_t iter_count, const size_t dklen){
 	const int hlen = 32;//num of bytes from hashing function output
 	uint64_t dklen_limit = ((4294967295ULL) * hlen);// number should be within 64bit range of unsigned numbers
@@ -149,67 +128,15 @@ std::vector<uint8_t> PBKDF2(const std::vector<uint8_t> &password, const std::vec
 		<< ", iteration_count: " << iter_count << ".\n";
 		std::exit(EXIT_FAILURE);
 	}
+
 	SHA256 obj;
 	std::vector<uint8_t> derived_key(32); //it should be 32byte key, each element 8bits/1byte ofc
-}
-*/
-int main(){
-	try {
-		std::cout << "=== CryptoRandom Functionality Test ===\n";
+	uint64_t l_ceil = ceiling_func(dklen, hlen);//number of byte blocks in final key, rounded up
+	uint64_t r = dklen - ((l_ceil - 1) * hlen;// number of bytes in the last block
 	
-		CryptoRandom cr;
-
-		//Test salt generation
-		auto salt1 = cr.GetSalt(16);
-		auto salt2 = cr.GetSalt(16);
-		std::cout << "Salt 1 (16 bytes): "; print_hex(salt1);
-		std::cout << "Salt 2 (16 bytes): "; print_hex(salt2);
-
-		if (salt1 == salt2)
-			std::cout << "ERROR: Salt values should differ\n";
-		else
-			std::cout << "Salt values differ as expected\n";
-
-		//Test IV generation
-		auto iv1 = cr.GetIv(16);
-		auto iv2 = cr.GetIv(16);
-		std::cout << "IV 1 (16 bytes):	 "; print_hex(iv1);
-		std::cout << "IV 2 (16 bytes):	 "; print_hex(iv2);
-
-		if (iv1 == iv2)
-			std::cout << "ERROR: IV values should differ\n";
-		else
-			std::cout << "IV values differ as expected\n";
-
-		//Test different sizes
-		auto salt32 = cr.GetSalt(32);
-		auto iv32 = cr.GetIv(32);
-		std::cout << "Salt 32 bytes size: " << salt32.size() << "\n";
-		std::cout << "IV 32 bytes size:   " << iv32.size() << "\n";
-
-		//Test invalid input
-		try {
-			cr.GetSalt(0);
-			std::cout << "ERROR: Expected exception for salt size 0\n";
-		} catch (const std::exception& e) {
-			std::cout << "Expected exception for salt size 0: " << e.what() << "\n";
-		}
-
-		try {
-			cr.GetIv(0);
-			std::cout << "ERROR: Expected exception for IV size 0\n";
-		} catch (const std::exception& e) {
-			std::cout << "Expected exception for IV size 0: " << e.what() << "\n";
-		}
-
-		std::cout << "=== All basic functionality tests completed ===\n";
-	}
-	catch (const std::exception &e) {
-		std::cerr << "Unhandled exception: " << e.what() << "\n";
-	}
-
-	return 0;
+	
 }
+
 
 
 
