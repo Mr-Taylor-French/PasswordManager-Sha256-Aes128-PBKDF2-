@@ -53,6 +53,19 @@
         "variant": "cpp",
         "aes": "cpp",
         "iomanip": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "__bit_reference": "cpp",
+        "__locale": "cpp",
+        "__split_buffer": "cpp",
+        "__verbose_abort": "cpp",
+        "cstring": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "mutex": "cpp",
+        "print": "cpp",
+        "cstdarg": "cpp",
+        "execution": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }

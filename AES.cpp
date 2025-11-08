@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <fstream>
 #include <cstdint>
 #include <vector>
 #include <array>
@@ -333,7 +334,7 @@ std::array<uint8_t,16> decrypt(const std::array<uint8_t,16>& input, const std::a
 /**
  * inverse AES function
  */
-void aes128_decrypt(std::string key, std::array<uint8_t,16> cipherText){
+std::string aes128_decrypt(std::string key, std::array<uint8_t,16> cipherText){
     // Convert to fixed 128-bit byte array
     std::vector<uint8_t> keyBytes = stringTo128Bits(key);
 
@@ -347,12 +348,14 @@ void aes128_decrypt(std::string key, std::array<uint8_t,16> cipherText){
     std::array<uint8_t,16> decrypted = decrypt(cipherText, keyArray);
 
     //show plain text
-    std::cout << "Decrypted Plaintext:  ";
+    // std::cout << "Decrypted Plaintext:  ";
     std::string decryptedString = hexArrayToString(decrypted);
-    std::cout << decryptedString << "\n";
+    // std::cout << decryptedString << "\n";
+
+    return decryptedString;
 }
 
-void aes128(std::string key, std::string password){
+std::string aes128(std::string key, std::string password){
     // Convert to fixed 128-bit byte arrays
     std::vector<uint8_t> keyBytes = stringTo128Bits(key);
     std::vector<uint8_t> passBytes = stringTo128Bits(password);
@@ -378,21 +381,118 @@ void aes128(std::string key, std::string password){
     std::array<uint8_t,16> encrypted = encrypt(passArray, keyArray);
 
     //test hex
-    std::cout << hexKey << std::endl;
-    std::cout << hexPass << std::endl;
+    // std::cout << hexKey << std::endl;
+    // std::cout << hexPass << std::endl;
 
     //show cipher text
-    std::cout << "Ciphertext:  ";
-    for (auto c : encrypted){
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)c;
-    }
-    std::cout << "\n";
+    // std::cout << "Ciphertext:  ";
+    // for (auto c : encrypted){
+    //     std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)c;
+    // }
+    // std::cout << "\n";
 
-    aes128_decrypt(key, encrypted);
+    std::string encPassword = hexArrayToString(encrypted);
+    return encPassword;
+    //aes128_decrypt(key, encrypted);
+}
+
+// CSV format: Website,Username,Password,Key
+void writeToCSV(const std::string& filename, const std::string& website, 
+                const std::string& username, const std::string& password, const std::string& key) {
+    std::ofstream file;
+    file.open(filename, std::ios::app);
+    if (file.is_open()) {
+        file <<  website << "," 
+             << username << "," 
+             << password << "," 
+             << key << "\n";
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+    }
+}
+
+void readFromCSV(const std::string& filename, const std::string& website, const std::string& username) {
+    std::ifstream file(filename);
+    if (file.is_open()) {
+        std::string line;
+        bool found = false;
+        while (std::getline(file, line)) {
+            std::istringstream ss(line);
+            std::string site, user, password, key;
+
+            std::getline(ss, site, ',');
+            std::getline(ss, user, ',');
+            std::getline(ss, password, ',');
+            std::getline(ss, key, ',');
+
+            password = aes128_decrypt(key, hexStringToArray16(toHex(std::vector<uint8_t>(password.begin(), password.end()))));
+
+            if (site == website && user == username) {
+                std::cout << "Password: " << password << "\n";
+                //std::cout << "Key: " << key << "\n";
+                found = true;
+                break;
+            }
+        }
+        file.close();
+        if (!found) {
+            std::cout << "No entry found for the given website and username.\n";
+        }
+    } else {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+    }
 }
 
 int main(){
-    aes128("Thats my Kung Fu", "Two One Nine Two");
+    //aes128("Thats my Kung Fu", "Two One Nine Two");
+
+    int choice = 0;
+    std::string website;
+    std::string username;
+    std::string filename = "passwords.csv";
+
+    while (choice != 3) {
+        std::cout << "Password Manager\n";
+        std::cout << "1. Add Entry\n";
+        std::cout << "2. View Entry\n";
+        std::cout << "3. Exit\n";
+        std::cout << "Enter your choice: ";
+        std::cin >> choice;
+        std::cin.ignore(); // to ignore the newline character after the integer input
+
+        if (choice == 1) {
+            std::string website, username, password, key;
+            std::cout << "Enter Website: ";
+            std::getline(std::cin, website);
+            std::cout << "Enter Username: ";
+            std::getline(std::cin, username);
+            std::cout << "Enter Password: ";
+            std::getline(std::cin, password);
+            std::cout << "Enter Key: ";
+            std::getline(std::cin, key);
+
+            password = aes128(key, password); // Encrypt and display ciphertext
+
+            writeToCSV(filename, website, username, password, key);
+            std::cout << "Password added successfully!\n";
+
+        } else if (choice == 2) {
+            std::cout << "Website: ";
+            std::cin >> website;
+            std::cin.ignore(); // to ignore the newline character
+            std::cout << "Username: ";
+            std::cin >> username;
+            std::cin.ignore(); // to ignore the newline character
+            readFromCSV(filename, website, username);
+
+        } else if (choice == 3) {
+            std::cout << "Exiting...\n";
+
+        } else {
+            std::cout << "Invalid choice. Please try again.\n";
+        }
+    }
 
     return 0;
 }
