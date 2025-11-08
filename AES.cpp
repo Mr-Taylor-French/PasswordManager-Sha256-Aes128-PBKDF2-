@@ -203,4 +203,8 @@ void aes128(std::string key, std::string password){
 
 int main(){
     aes128("Thats my Kung Fu", "Two One Nine Two");
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes
