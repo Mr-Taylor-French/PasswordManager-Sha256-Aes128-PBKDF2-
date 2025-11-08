@@ -113,11 +113,53 @@ std::vector<uint8_t> CryptoRandom::GetIv(size_t size){//almost same as salt but 
 CryptoRandom::~CryptoRandom() {
 		secure_wipe_vec(hash_vec);
 		secure_wipe_vec(hmac_rand);
-	}
-};
+}
+
 
 uint64_t ceiling_func(uint64_t a, uint64_t b){//no need for another library which will get messy, simple way to do it
 	return (a + b - 1) / b;
+}
+
+// INT: encode block index i as 4-octet big-endian vector
+std::vector<uint8_t> INT(uint32_t i) {
+    std::vector<uint8_t> bytes(4);
+    bytes[0] = static_cast<uint8_t>((i >> 24) & 0xFF);
+    bytes[1] = static_cast<uint8_t>((i >> 16) & 0xFF);
+    bytes[2] = static_cast<uint8_t>((i >> 8) & 0xFF);
+    bytes[3] = static_cast<uint8_t>(i & 0xFF);
+    return bytes;
+}
+
+// F: the PBKDF2 block function: F(P, S, c, i) -> hLen-octet block
+std::vector<uint8_t> F(const std::vector<uint8_t>& password,
+                       const std::vector<uint8_t>& salt,
+                       uint64_t iter_count,
+                       uint32_t block_index) {
+    const size_t hLen = 32; // HMAC-SHA256 output length
+    if (iter_count == 0) throw std::runtime_error("iter_count must be > 0");
+
+    // salt || INT(i)
+    std::vector<uint8_t> salt_block = salt;
+    std::vector<uint8_t> int_be = INT(block_index);
+    salt_block.insert(salt_block.end(), int_be.begin(), int_be.end());
+
+    // U1 = PRF(P, S || INT(i))
+    std::vector<uint8_t> U = HMAC_SHA256(password, salt_block);
+    if (U.size() != hLen) throw std::runtime_error("HMAC_SHA256 returned wrong size");
+
+    std::vector<uint8_t> T = U; // T = U1 initially
+
+    // U2..Uc
+    for (uint64_t j = 1; j < iter_count; ++j) {
+        U = HMAC_SHA256(password, U); // U_j = PRF(P, U_{j-1})
+        if (U.size() != hLen) throw std::runtime_error("HMAC_SHA256 returned wrong size during iterations");
+        for (size_t k = 0; k < hLen; ++k) {
+            T[k] ^= U[k];
+        }
+    }
+
+    // return T (hLen bytes)
+    return T;
 }
 
 std::vector<uint8_t> PBKDF2(const std::vector<uint8_t> &password, const std::vector<uint8_t> &salt, const uint64_t iter_count, const size_t dklen){
@@ -132,16 +174,25 @@ std::vector<uint8_t> PBKDF2(const std::vector<uint8_t> &password, const std::vec
 	SHA256 obj;
 	std::vector<uint8_t> derived_key(32); //it should be 32byte key, each element 8bits/1byte ofc
 	uint64_t l_ceil = ceiling_func(dklen, hlen);//number of byte blocks in final key, rounded up
-	uint64_t r = dklen - ((l_ceil - 1) * hlen;// number of bytes in the last block
+	uint64_t r = dklen - ((l_ceil - 1) * hlen);// number of bytes in the last block
 	
-	
+	std::vector<uint8_t> derivedKey;
+    derivedKey.reserve(dklen);
+    uint64_t hLen = 32; 
+    uint64_t maxLen = ((1ULL << 32) - 1) * hLen;
+
+    //checking length and throwing error
+    if (dklen > maxLen) {
+        throw std::runtime_error("derived key too long");
+    }
+
+    //For each block of the derived key apply the function F
+    for(int i = 1; i <= l_ceil; i++){
+        std::vector<uint8_t> T = F(password, salt, iter_count, i);
+        derivedKey.insert(derivedKey.end(), T.begin(), T.end());
+    }
+
+    derivedKey.resize(dklen);
+    return std::vector<uint8_t>(derivedKey.begin(), derivedKey.end());
+
 }
-
-
-
-
-
-
-
-
-

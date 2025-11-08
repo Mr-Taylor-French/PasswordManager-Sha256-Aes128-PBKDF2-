@@ -51,6 +51,8 @@
         "text_encoding": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp",
-        "aes": "cpp"
+        "aes": "cpp",
+        "iomanip": "cpp",
+        "sstream": "cpp"
     }
 }
